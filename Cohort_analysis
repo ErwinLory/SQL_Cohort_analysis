@@ -1,0 +1,57 @@
+WITH complete_order AS(
+  SELECT *
+  FROM`bigquery-public-data.thelook_ecommerce.order_items`
+  WHERE status = 'Complete' AND DATE_TRUNC(DATE(created_at), MONTH) < '2022-10-01'
+),
+
+cohort_items AS(
+  SELECT
+    user_id
+    ,MIN(DATE(DATE_TRUNC(created_at, MONTH))) AS cohort_month
+  FROM complete_order
+  GROUP BY user_id
+),
+
+user_activities AS(
+  SELECT 
+    o.user_id AS user_id
+    ,DATE_DIFF(DATE(DATE_TRUNC(created_at, MONTH)), cohort.cohort_month, MONTH) AS month_number
+  FROM complete_order AS o
+  LEFT JOIN cohort_items AS cohort
+    ON o.user_id = cohort.user_id
+  WHERE EXTRACT(YEAR FROM cohort.cohort_month) IN (2022)
+  AND EXTRACT(YEAR FROM DATE_TRUNC(o.created_at, YEAR)) IN (2022)
+  GROUP BY 1,2
+),
+cohort_size AS(
+  SELECT cohort_month 
+    ,COUNT(cohort_month) as num_users
+  FROM cohort_items
+  GROUP BY cohort_month 
+  ORDER BY cohort_month
+),
+
+retention_table AS(
+  SELECT 
+    items.cohort_month AS cohort_month
+    ,act.month_number AS month_num
+    ,COUNT(items.cohort_month) AS num_users
+  FROM user_activities AS act
+  LEFT JOIN cohort_items AS items
+    ON act.user_id = items.user_id
+  GROUP BY cohort_month, month_number 
+  ORDER BY cohort_month, month_number
+)
+
+SELECT  
+  ret.cohort_month AS cohort_month
+  ,size.num_users AS cohort_size
+  ,ret.month_num AS month_number
+  ,ret.num_users AS total_user
+  ,ret.num_users/size.num_users AS percentage
+FROM retention_table AS ret
+LEFT JOIN cohort_size AS size
+  ON ret.cohort_month = size.cohort_month
+WHERE ret.cohort_month IS NOT NULL 
+AND ret.month_num BETWEEN 0 AND 6
+ORDER BY cohort_month, month_number;
