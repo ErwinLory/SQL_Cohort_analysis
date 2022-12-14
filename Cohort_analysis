@@ -1,9 +1,11 @@
+-- Filtering data only for complete order
 WITH complete_order AS(
   SELECT *
   FROM`bigquery-public-data.thelook_ecommerce.order_items`
   WHERE status = 'Complete' AND DATE_TRUNC(DATE(created_at), MONTH) < '2022-10-01'
 ),
 
+-- first post date per user (user is unique)
 cohort_items AS(
   SELECT
     user_id
@@ -12,6 +14,7 @@ cohort_items AS(
   GROUP BY user_id
 ),
 
+-- post activities from user (user isn't unique)
 user_activities AS(
   SELECT 
     o.user_id AS user_id
@@ -23,6 +26,8 @@ user_activities AS(
   AND EXTRACT(YEAR FROM DATE_TRUNC(o.created_at, YEAR)) IN (2022)
   GROUP BY 1,2
 ),
+
+-- total user every month based on first post date
 cohort_size AS(
   SELECT cohort_month 
     ,COUNT(cohort_month) as num_users
@@ -31,6 +36,7 @@ cohort_size AS(
   ORDER BY cohort_month
 ),
 
+-- prepare table
 retention_table AS(
   SELECT 
     items.cohort_month AS cohort_month
@@ -43,6 +49,7 @@ retention_table AS(
   ORDER BY cohort_month, month_number
 )
 
+-- final value (cohort_month, size, month_number, total user, & percentage)
 SELECT  
   ret.cohort_month AS cohort_month
   ,size.num_users AS cohort_size
